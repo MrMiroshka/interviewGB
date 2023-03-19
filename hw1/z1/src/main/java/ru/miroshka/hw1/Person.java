@@ -1,4 +1,4 @@
-package ru.miroshka;
+package ru.miroshka.hw1;
 
 public class Person {
     private final String firstName;

@@ -1,6 +1,6 @@
-package ru.miroshka;
+package ru.miroshka.hw1;
 
-public class App {
+public class AppZ1 {
     public static void main(String[] args) {
         Person tempPerson = new Person.Builder()
                 .setAddress("Тюменская область г.Тюмень ул.Коретная дом 66")
