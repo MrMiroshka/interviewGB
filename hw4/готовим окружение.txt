@@ -1,0 +1,5 @@
+docker run --name geek-pg -p 5432:5432 -e POSTGRES_USER=pggeek -e POSTGRES_PASSWORD=pggeek -d postgres:13.3
+psql -U pggeek
+psql \! chcp 1251;
+
+
