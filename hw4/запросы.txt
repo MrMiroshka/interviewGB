@@ -1,0 +1,91 @@
+**************************************************
+ошибки в расписании (фильмы накладываются друг на друга), отсортированные по возрастанию времени. Выводить надо колонки «фильм 1», «время начала», «длительность», «фильм 2», «время начала», «длительность»;
+**************************************************
+
+CREATE VIEW film_sessions AS
+SELECT F.id_film
+        ,F.film_name
+        ,F.duration
+		,S.date
+        ,S.time AS film_start
+        ,CAST(F.duration AS interval) + CAST(S.time AS time) AS film_end
+        ,S.hall_id
+FROM sessions AS S 
+JOIN films AS F
+ON S.films_id = F.id_film;
+ 
+SELECT  C.id_film AS Film1ID ,C.film_name AS Film1Name ,C.film_start AS Film1Start ,C.duration AS Film1Duration
+        ,C1.id_film AS Film2ID ,C1.film_name AS Film2Name ,C1.film_start AS Film2Start ,C1.duration AS Film2Duration
+FROM film_sessions AS C
+LEFT JOIN film_sessions AS C1 ON C1.film_start BETWEEN C.film_start AND C.film_end
+                    AND C.id_film <> C1.id_film AND C.hall_id = C1.hall_id
+WHERE C1.id_film IS NOT NULL
+ORDER BY Film1Start;
+
+
+**************************************************
+перерывы 30 минут и более между фильмами — выводить по уменьшению длительности перерыва. Колонки «фильм 1», «время начала», «длительность», «время начала второго фильма», «длительность перерыва»;
+**************************************************
+
+SELECT  C.id_film AS Film1ID ,C.film_name AS Film1Name ,C.film_start AS Film1Start ,C.duration AS Film1Duration
+        ,C1.id_film AS Film2ID ,C1.film_name AS Film2Name ,C1.film_start AS Film2Start ,C1.duration AS Film2Duration, C1.film_start-C.film_end AS "длительность перерыва"
+FROM film_sessions AS C
+LEFT JOIN film_sessions AS C1 ON (C1.film_start-C.film_end) BETWEEN '00:00:00' AND '00:30:00'
+                    AND C.id_film <> C1.id_film AND C.hall_id = C1.hall_id
+WHERE C1.id_film IS NOT NULL
+ORDER BY Film1Start;
+
+**************************************************
+список фильмов, для каждого — с указанием общего числа посетителей за все время, среднего числа зрителей за сеанс и общей суммы сборов по каждому фильму (отсортировать по убыванию прибыли). Внизу таблицы должна быть строчка «итого», содержащая данные по всем фильмам сразу;
+**************************************************
+drop view film_tickets;
+CREATE VIEW film_tickets AS
+SELECT F.id_film, F.film_name,F.country_id,F.year_of_issue,F.genre_id,F.duration,S.date,S.time,H.id_hall,H.hall_name,
+		T.number_ticket,T.row_id, T.place_id,CP.id_category_place,CP.category_place_name,P.cost
+FROM films AS F
+LEFT JOIN sessions AS S ON S.films_id = F.id_film
+LEFT JOIN halls AS H ON H.id_hall=S.hall_id
+LEFT JOIN tickets AS T ON T.date_h = S.date and T.time_h=S.time and T.hall_id = S.hall_id
+LEFT JOIN place_rows AS PR ON T.hall_id = PR.hall_id and T.row_id=PR.row and T.place_id = PR.place
+LEFT JOIN category_place AS CP ON PR.category_place_id = CP.id_category_place
+LEFT JOIN prices AS P ON P.category_place_id = CP.id_category_place and S.date = P.date and S.time=P.time
+WHERE T.sold = 'True';
+
+drop TABLE film_stats;
+CREATE TEMPORARY TABLE IF NOT EXISTS film_stats AS
+SELECT  FT.film_name,COUNT(*) as count_peopls,ROUND(avg(avgPeoples.count_people),2)AS avg_visit_session,SUM(cost) as sum_cost
+FROM film_tickets AS FT
+inner JOIN (
+	SELECT film_tickets.id_film,COUNT(*) as count_people,film_tickets.date,film_tickets.time 
+		FROM film_tickets
+		GROUP BY id_film, date,time
+) AS avgPeoples ON FT.id_film = avgPeoples.id_film and avgPeoples.date=FT.date and FT.time = avgPeoples.time
+GROUP BY film_name
+ORDER BY sum_cost DESC
+;
+
+
+SELECT *
+FROM film_stats 
+UNION
+SELECT 'итого', SUM(film_stats.count_peopls), ROUND(AVG(film_stats.avg_visit_session), 2), SUM(film_stats.sum_cost)
+FROM film_stats
+;
+
+
+**************************************************
+число посетителей и кассовые сборы, сгруппированные по времени начала фильма: с 9 до 15, с 15 до 18, с 18 до 21, с 21 до 00:00 (сколько посетителей пришло с 9 до 15 часов и т.д.).
+**************************************************
+
+SELECT
+    CASE
+        WHEN time BETWEEN '2023-03-27 09:00:00' AND '2023-03-27 15:00:00' THEN 'с 9 до 15'
+        WHEN time BETWEEN '2023-03-27 15:00:01' AND '2023-03-27 18:00:00' THEN 'с 15 до 18'
+        WHEN time BETWEEN '2023-03-27 18:00:01' AND '2023-03-27 21:00:00' THEN 'с 18 до 21'
+        WHEN time BETWEEN '2023-03-27 21:00:01' AND '2023-03-28 00:00:00' THEN 'с 21 до 00'
+        ELSE 'В другое время'
+        END AS interval,
+  COUNT(*) as count_peopls,
+  SUM(cost) as sum_cost
+FROM film_tickets s
+GROUP BY interval;
